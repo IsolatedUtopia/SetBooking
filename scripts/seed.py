@@ -8,8 +8,8 @@ from app.models.area import Area
 from app.models.seat import Seat
 
 AREAS = [
-    ("A 区·靠窗", "安静、靠窗、有插座", "A", 5),
-    ("B 区·静音", "全程禁言，适合刷题", "B", 3),
+    ("A 区·靠窗", "安静、靠窗、有插座", "A", 30),
+    ("B 区·静音", "全程禁言，适合刷题", "B", 12),
     ("C 区·维修中", "设备检修，暂未排座位", "C", 0),
 ]
 
