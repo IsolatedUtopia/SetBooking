@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     CheckConstraint,
@@ -14,8 +15,9 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 from app.db.base import Base
+if TYPE_CHECKING:
+    from app.models.seat import Seat
 
 
 class ReservationStatus(StrEnum):
@@ -50,7 +52,8 @@ class Reservation(Base):
     checked_in_at: Mapped[datetime | None] = mapped_column(DateTime)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-
+    seat: Mapped["Seat"] = relationship(lazy="selectin")
+    
     slots: Mapped[list["ReservationSlot"]] = relationship(
         back_populates="reservation", cascade="all, delete-orphan", lazy="selectin"
     )

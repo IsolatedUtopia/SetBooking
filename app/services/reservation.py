@@ -8,6 +8,7 @@
 """
 
 from datetime import UTC, date, datetime
+from collections.abc import Sequence
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -154,3 +155,46 @@ async def create_reservation(
 
     await session.refresh(reservation)
     return reservation
+
+async def list_my_reservations(
+    session: AsyncSession, user_id: int, limit: int = 50
+) -> Sequence[Reservation]:
+    """我的预约：新的在前，同一天按开始时段排。"""
+    stmt = (
+        select(Reservation)
+        .where(Reservation.user_id == user_id)
+        .order_by(Reservation.date.desc(), Reservation.start_slot.asc())
+        .limit(limit)
+    )
+    return (await session.scalars(stmt)).all()
+
+
+async def cancel_reservation(
+    session: AsyncSession, user: User, reservation_id: int
+) -> None:
+    """取消预约：改状态 + 删掉占用格子（删格子才是真正把座位还回去）。"""
+    reservation = await session.get(Reservation, reservation_id)
+
+    # 不属于自己的预约统一回 404，而不是 403：
+    # 403 等于告诉别人"这个 id 存在，只是不是你的"，会被用来枚举预约号。
+    if reservation is None or reservation.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="预约不存在")
+
+    if reservation.status == ReservationStatus.CANCELLED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="该预约已取消，请勿重复操作"
+        )
+    if reservation.status in (ReservationStatus.COMPLETED, ReservationStatus.NO_SHOW):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="该预约已结束，无法取消"
+        )
+
+    reservation.status = ReservationStatus.CANCELLED
+    reservation.cancelled_at = _now_naive()
+
+    # cascade="all, delete-orphan"：清空子集合 = flush 时 DELETE 这些格子行。
+    # 格子一删，唯一索引立刻放开，座位就回到"可预约"状态。
+    reservation.slots.clear()
+
+    await session.commit()
+

@@ -14,6 +14,15 @@ class ReservationStatus(StrEnum):
     NO_SHOW = "NO_SHOW"
 
 
+class SeatBrief(BaseModel):
+    """预约里带的座位信息，只要 id 和编号，不要座位表的其他字段。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    code: str
+
+
 class ReservationCreate(BaseModel):
     seat_id: int
     date: date
@@ -35,6 +44,7 @@ class ReservationRead(BaseModel):
 
     id: int
     seat_id: int
+    seat: SeatBrief
     date: date
     start_slot: int
     end_slot: int
