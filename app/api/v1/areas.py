@@ -1,10 +1,14 @@
-from fastapi import APIRouter, HTTPException, status
+import datetime as dt
+
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
 from app.api.deps import SessionDep
 from app.models.area import Area
 from app.models.seat import Seat
 from app.schemas.area import AreaRead, SeatRead
+from app.schemas.calendar import AreaDayCalendar
+from app.services.calendar import get_area_calendar
 
 router = APIRouter(prefix="/areas", tags=["areas"])
 
@@ -27,3 +31,12 @@ async def list_seats(area_id: int, session: SessionDep) -> list[Seat]:
         .order_by(Seat.code)
     )
     return list(seats)
+
+
+@router.get("/{area_id}/calendar", response_model=AreaDayCalendar)
+async def area_calendar(
+    area_id: int,
+    session: SessionDep,
+    day: dt.date = Query(alias="date", description="查询日期，格式 YYYY-MM-DD"),
+) -> AreaDayCalendar:
+    return await get_area_calendar(session, area_id, day)
