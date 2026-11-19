@@ -38,12 +38,23 @@ def _bad_request(detail: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
+def _is_banned(user: User, moment: datetime | None = None) -> bool:
+    """是否处于封禁期内。纯判断，不抛异常，方便别处复用。"""
+    now = moment or _now_naive()
+    return user.banned_until is not None and user.banned_until > now
+
+
 def _check_user_allowed(user: User) -> None:
-    if user.banned_until is not None and user.banned_until > _now_naive():
+    if _is_banned(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"账号因多次爽约被封禁，解封时间 {user.banned_until:%Y-%m-%d %H:%M}",
         )
+
+
+def should_ban(no_show_count: int) -> bool:
+    """爽约次数达到阈值就该封。纯函数，方便单测。"""
+    return no_show_count >= settings.max_no_show_before_ban
 
 
 def _check_date_window(day: date) -> None:
@@ -323,6 +334,15 @@ async def release_no_shows(session: AsyncSession, now: datetime | None = None) -
 
         if reservation.date < today:
             backlog_dates.append(reservation.date)
+
+        # 计入爽约：同一事务里完成，封禁期间不重复累计
+        user = await session.get(User, reservation.user_id)
+        if user is None or _is_banned(user):
+            continue
+        user.no_show_count += 1
+        if should_ban(user.no_show_count):
+            user.banned_until = _now_naive() + timedelta(days=settings.ban_days)
+            user.no_show_count = 0
 
     await session.commit()
 
