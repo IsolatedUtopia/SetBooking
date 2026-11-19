@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     check_in_lead_minutes: int = 15           # 开始前 15 分钟可签到
     no_show_release_minutes: int = 30         # 开始后 30 分钟未签到自动释放
     max_no_show_before_ban: int = 3           # 爽约 3 次
+    no_show_scan_seconds: int = 60            # 超时释放扫描间隔（秒）每60s去扫描该时间段格子的预约有没有来，有人来就没事，有人爽约了就把格子释放掉
     ban_days: int = 7                         # 封禁 7 天
 
 

@@ -7,17 +7,20 @@
 3. 单据与格子在同一事务里提交：要么都成功，要么都回滚。
 """
 
+import logging
 from collections.abc import Sequence
 from datetime import UTC, date, datetime, time, timedelta
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models import Reservation, ReservationSlot, ReservationStatus, Seat, User
 from app.schemas.reservation import ReservationCreate
+
+logger = logging.getLogger(__name__)
 
 SLOT_COUNT = (settings.day_end_hour - settings.day_start_hour) * 60 // settings.slot_minutes
 
@@ -260,3 +263,77 @@ async def check_in_reservation(
     await session.commit()
     await session.refresh(reservation)
     return reservation
+
+# ---------------------------------------------------------------------------
+# 超时未签到 → 爽约 → 释放座位
+# ---------------------------------------------------------------------------
+
+# 只回看最近几天：扫描任务跑得再勤，也不该扫全表
+NO_SHOW_LOOKBACK_DAYS = 7
+
+
+def is_no_show(day: date, start_slot: int, now: datetime | None = None) -> bool:
+    """过了「开始时间 + 30 分钟」还没签到，就算爽约。
+
+    和签到窗口共用同一把尺子：窗口上界 = 爽约判定线。
+    """
+    moment = now or _local_now()
+    deadline = _slot_start(day, start_slot) + timedelta(
+        minutes=settings.no_show_release_minutes
+    )
+    return moment > deadline
+
+
+async def release_no_shows(session: AsyncSession, now: datetime | None = None) -> list[int]:
+    """扫描并释放超时未签到的预约，返回本次处理的预约 id 列表。
+
+    幂等：用「守卫式 UPDATE」而不是「读出来改对象」——
+    UPDATE ... WHERE id=? AND status='PENDING' 的 rowcount 决定这一次到底有没有改到。第二次运行的话一定都是0。
+    """
+    moment = now or _local_now()
+    today = moment.date()
+
+    stmt = select(Reservation).where(
+        Reservation.status == ReservationStatus.PENDING,
+        Reservation.date >= today - timedelta(days=NO_SHOW_LOOKBACK_DAYS),
+        Reservation.date <= today,
+    )
+    candidates = (await session.scalars(stmt)).all()
+
+    released: list[int] = []
+    backlog_dates: list[date] = []      # 本次补扫到的「非今天」的单子
+
+    for reservation in candidates:
+        if not is_no_show(reservation.date, reservation.start_slot, moment):
+            continue
+
+        result = await session.execute(
+            update(Reservation)
+            .where(
+                Reservation.id == reservation.id,
+                Reservation.status == ReservationStatus.PENDING,
+            )
+            .values(status=ReservationStatus.NO_SHOW)
+        )
+        if result.rowcount == 0:
+            continue
+
+        reservation.slots.clear()
+        released.append(reservation.id)
+
+        if reservation.date < today:
+            backlog_dates.append(reservation.date)
+
+    await session.commit()
+
+    # --- 可观测性：让「漏跑」自己说话 ---
+    if released:
+        logger.info("超时释放 %d 条，ids=%s", len(released), released)
+    if backlog_dates:
+        logger.warning(
+            "补扫到 %d 条非今天的过期预约（最早 %s）：调度器可能停摆过，请检查是否漏跑",
+            len(backlog_dates),
+            min(backlog_dates),
+        )
+
+    return released

@@ -11,8 +11,8 @@ from app.models import Area, Seat
 
 
 @pytest_asyncio.fixture
-async def client():
-    # 每个测试一个全新的内存库：进程结束就没了，永远不会污染 dev.db
+async def session_factory():#session_factory 管"库从哪来、数据怎么种"
+    """每个测试一个全新的内存库，并把 sessionmaker 交给测试自己用。"""
     engine = create_async_engine(
         "sqlite+aiosqlite://",
         connect_args={"check_same_thread": False},
@@ -23,18 +23,23 @@ async def client():
 
     TestSession = async_sessionmaker(engine, expire_on_commit=False)
 
-    # 基础数据：1 个区域 + 3 个座位（A-01、A-03 有电源）
     async with TestSession() as session:
         area = Area(name="A 区·测试", description="单元测试用区域")
         area.seats = [Seat(code=f"A-{i:02d}", has_power=(i % 2 == 1)) for i in range(1, 4)]
         session.add(area)
         await session.commit()
 
+    yield TestSession
+
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def client(session_factory):#client 管"HTTP 请求走哪个库"
     async def override_get_session():
-        async with TestSession() as session:
+        async with session_factory() as session:
             yield session
 
-    # 关键：把生产用的 get_session 换成测试库的
     app.dependency_overrides[get_session] = override_get_session
 
     transport = ASGITransport(app=app)
@@ -42,4 +47,3 @@ async def client():
         yield ac
 
     app.dependency_overrides.clear()
-    await engine.dispose()
