@@ -7,8 +7,8 @@
 3. 单据与格子在同一事务里提交：要么都成功，要么都回滚。
 """
 
-from datetime import UTC, date, datetime
 from collections.abc import Sequence
+from datetime import UTC, date, datetime, time, timedelta
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -198,3 +198,65 @@ async def cancel_reservation(
 
     await session.commit()
 
+
+# ---------------------------------------------------------------------------
+# 签到
+# ---------------------------------------------------------------------------
+
+
+def _local_now() -> datetime:
+    """业务时间用本地时区：日历上的 08:00 是本地 08:00，不是 UTC 08:00。"""
+    return datetime.now()
+
+
+def _slot_start(day: date, slot_index: int) -> datetime:
+    """某天第 slot_index 个时段开始的那一刻（本地时间）。"""
+    minutes = settings.day_start_hour * 60 + slot_index * settings.slot_minutes
+    return datetime.combine(day, time.min) + timedelta(minutes=minutes)
+
+
+def check_in_window(day: date, start_slot: int, now: datetime | None = None) -> str | None:
+    """签到窗口：[开始 - 15 分钟, 开始 + 30 分钟]。
+
+    返回 None 表示可以签到；返回字符串表示拒绝原因。
+    写成纯函数（不查库、不读当前时间）是为了能直接单测。
+    """
+    moment = now or _local_now()
+    start = _slot_start(day, start_slot)
+    earliest = start - timedelta(minutes=settings.check_in_lead_minutes)
+    latest = start + timedelta(minutes=settings.no_show_release_minutes)
+
+    if moment < earliest:
+        return f"还没到签到时间，{earliest:%H:%M} 起可签到"
+    if moment > latest:
+        return f"签到已截止，{latest:%H:%M} 后视为爽约"
+    return None
+
+
+async def check_in_reservation(
+    session: AsyncSession, user: User, reservation_id: int
+) -> Reservation:
+    """签到：PENDING → CHECKED_IN，写 checked_in_at。"""
+    reservation = await session.get(Reservation, reservation_id)
+    if reservation is None or reservation.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="预约不存在")
+
+    # 状态守卫：先判"能不能",再判"时间对不对"
+    if reservation.status == ReservationStatus.CHECKED_IN:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="该预约已签到，请勿重复操作"
+        )
+    if reservation.status != ReservationStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="该预约已取消或已结束，无法签到"
+        )
+
+    reason = check_in_window(reservation.date, reservation.start_slot)
+    if reason is not None:
+        raise _bad_request(reason)
+
+    reservation.status = ReservationStatus.CHECKED_IN
+    reservation.checked_in_at = _now_naive()  # 存 UTC，和 created_at 保持一致
+    await session.commit()
+    await session.refresh(reservation)
+    return reservation

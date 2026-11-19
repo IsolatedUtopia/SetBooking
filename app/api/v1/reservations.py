@@ -5,6 +5,7 @@ from app.models.reservation import Reservation
 from app.schemas.reservation import ReservationCreate, ReservationRead
 from app.services.reservation import (
     cancel_reservation,
+    check_in_reservation,
     create_reservation,
     list_my_reservations,
 )
@@ -24,6 +25,13 @@ async def list_my_reservations_endpoint(
     session: SessionDep, current_user: CurrentUser
 ) -> list[Reservation]:
     return list(await list_my_reservations(session, current_user.id))
+
+
+@router.post("/{reservation_id}/check-in", response_model=ReservationRead)
+async def check_in_reservation_endpoint(
+    reservation_id: int, session: SessionDep, current_user: CurrentUser
+) -> Reservation:
+    return await check_in_reservation(session, current_user, reservation_id)
 
 
 @router.delete("/{reservation_id}", status_code=status.HTTP_204_NO_CONTENT)

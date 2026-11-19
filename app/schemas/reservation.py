@@ -49,4 +49,6 @@ class ReservationRead(BaseModel):
     start_slot: int
     end_slot: int
     status: ReservationStatus
+    checked_in_at: datetime | None
+    cancelled_at: datetime | None
     created_at: datetime
