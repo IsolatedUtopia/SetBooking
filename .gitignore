@@ -9,3 +9,4 @@ __pycache__/
 *.log
 .vscode/
 *.bak
+backoffice/backoffice/local_settings.py
