@@ -84,8 +84,9 @@ DATABASES = {
 LANGUAGE_CODE = "zh-hans"
 TIME_ZONE = "Asia/Shanghai"
 USE_I18N = True
-# 业务表里存的是 naive datetime（_now_naive / 本地时间混用），
-# 开 USE_TZ 会让后台按 UTC 显示、和 API 对不上。
+# 业务表统一存北京时间：连接层已 SET time_zone='+08:00'（见 app/db/session.py）。
+# USE_TZ=False：Django 原样读、原样写、原样显示，不做 UTC 换算，
+# 与 FastAPI 侧语义一致；运营在 Admin 里填 18:00 存的就是 18:00。
 USE_TZ = False
 
 STATIC_URL = "static/"

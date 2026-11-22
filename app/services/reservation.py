@@ -9,7 +9,8 @@
 
 import logging
 from collections.abc import Sequence
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select, update
@@ -29,18 +30,13 @@ OCCUPYING_STATUSES = [
 ]
 
 
-def _now_naive() -> datetime:
-    """库里 DateTime 不带时区，统一按 UTC 存，比较前摘掉 tzinfo。"""
-    return datetime.now(UTC).replace(tzinfo=None)
-
-
 def _bad_request(detail: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
 def _is_banned(user: User, moment: datetime | None = None) -> bool:
     """是否处于封禁期内。纯判断，不抛异常，方便别处复用。"""
-    now = moment or _now_naive()
+    now = moment or _local_now()
     return user.banned_until is not None and user.banned_until > now
 
 
@@ -204,7 +200,7 @@ async def cancel_reservation(
         )
 
     reservation.status = ReservationStatus.CANCELLED
-    reservation.cancelled_at = _now_naive()
+    reservation.cancelled_at = _local_now()
 
     # cascade="all, delete-orphan"：清空子集合 = flush 时 DELETE 这些格子行。
     # 格子一删，唯一索引立刻放开，座位就回到"可预约"状态。
@@ -219,8 +215,8 @@ async def cancel_reservation(
 
 
 def _local_now() -> datetime:
-    """业务时间用本地时区：日历上的 08:00 是本地 08:00，不是 UTC 08:00。"""
-    return datetime.now()
+    """业务时间：固定北京时间。不跟随宿主机时区，保证换机器后行为一致。"""
+    return datetime.now(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
 
 
 def _slot_start(day: date, slot_index: int) -> datetime:
@@ -270,7 +266,7 @@ async def check_in_reservation(
         raise _bad_request(reason)
 
     reservation.status = ReservationStatus.CHECKED_IN
-    reservation.checked_in_at = _now_naive()  # 存 UTC，和 created_at 保持一致
+    reservation.checked_in_at = _local_now()  # 存 UTC，和 created_at 保持一致
     await session.commit()
     await session.refresh(reservation)
     return reservation
@@ -341,7 +337,7 @@ async def release_no_shows(session: AsyncSession, now: datetime | None = None) -
             continue
         user.no_show_count += 1
         if should_ban(user.no_show_count):
-            user.banned_until = _now_naive() + timedelta(days=settings.ban_days)
+            user.banned_until = _local_now() + timedelta(days=settings.ban_days)
             user.no_show_count = 0
 
     await session.commit()

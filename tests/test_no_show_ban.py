@@ -3,7 +3,7 @@
 from sqlalchemy import select
 
 from app.models import User
-from app.services.reservation import _now_naive, release_no_shows, should_ban
+from app.services.reservation import _local_now, release_no_shows, should_ban
 from tests.helpers import register_and_login
 
 TOMORROW = date.today() + timedelta(days=1)
@@ -59,7 +59,7 @@ async def test_third_no_show_bans_and_blocks_booking(client, session_factory) ->
         assert user is not None
         assert user.no_show_count == 0            # 封禁时清零，开始新一轮
         assert user.banned_until is not None
-        assert user.banned_until > _now_naive()
+        assert user.banned_until > _local_now()
 
     blocked = await client.post("/api/v1/reservations", json=payload(seat_id=2), headers=headers)
     assert blocked.status_code == 403
@@ -73,7 +73,7 @@ async def test_expired_ban_allows_booking(client, session_factory) -> None:
     async with session_factory() as session:
         user = await session.scalar(select(User).where(User.email == "student@example.com"))
         assert user is not None
-        user.banned_until = _now_naive() - timedelta(days=1)
+        user.banned_until = _local_now() - timedelta(days=1)
         await session.commit()
 
     ok = await client.post("/api/v1/reservations", json=payload(), headers=headers)
