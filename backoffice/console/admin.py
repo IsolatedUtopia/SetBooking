@@ -3,7 +3,8 @@
 当前一律**只读**，原因写在 ReadOnlyAdmin 的注释里：后台直接改表会绕过
 FastAPI service 层的业务不变量。等 W3D2 再单独开放"安全的写"（例如座位启停用）。
 """
-
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from django import forms
 from django.contrib import admin
 from django.db.models import Count
@@ -32,9 +33,12 @@ class ReadOnlyAdmin(admin.ModelAdmin):
     def get_readonly_fields(self, request, obj=None):
         declared = list(super().get_readonly_fields(request, obj))
         editable = set(self.editable_fields)
+        excluded = set(self.get_exclude(request, obj) or ())  
         for field in self.model._meta.fields:
-            if field.name not in editable and field.name not in declared:
-                declared.append(field.name)
+            name = field.name
+            if name in editable or name in excluded or name in declared:
+                continue
+            declared.append(name)
         return declared
 
     def has_add_permission(self, request) -> bool:
@@ -73,7 +77,23 @@ class ReservationSlotInline(ReadOnlyInline):
     fields = ("date", "slot_index")
     readonly_fields = fields
 
+class _UserAdminForm(forms.ModelForm):
+    """封禁/解封的业务校验。"""
 
+    class Meta:
+        model = User
+        fields = "__all__"
+
+    def clean_banned_until(self):
+        value = self.cleaned_data.get("banned_until")
+        if value is None:
+            return value
+        now = datetime.now(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
+        if value <= now:
+            raise forms.ValidationError(
+                "封禁截止时间必须晚于当前时间；要解封请清空这个字段后保存。"
+            )
+        return value
 # @admin.register(User)
 # class UserAdmin(ReadOnlyAdmin):
 #     list_display = (
@@ -102,16 +122,30 @@ class UserAdmin(ReadOnlyAdmin):
     ordering = ("id",)
     exclude = ("hashed_password",)
 
+    # 只放开"封禁截止时间"，其余字段仍由基类机械地补成只读
+    editable_fields = ("banned_until",)
+    form = _UserAdminForm
+
     readonly_fields = ("id", "created_at")
     fieldsets = (
         ("账号信息", {"fields": ("id", "name", "email", "student_no")}),
         ("账号状态", {"fields": ("is_active",)}),
         ("爽约与封禁", {
             "fields": ("no_show_count", "banned_until"),
-            "description": "爽约满 3 次自动封禁 7 天；此处只读，解除封禁走运营操作。",
+            "description": (
+                "爽约满 3 次自动封禁 7 天；"
+                "运营也可在此手动封禁（填未来时间）或解封（清空后保存，同时清零爽约次数）。"
+            ),
         }),
         ("时间", {"fields": ("created_at",), "classes": ("collapse",)}),
     )
+
+    def save_model(self, request, obj, form, change) -> None:
+        # 从"有封禁"变成"无封禁" = 运营手动解封，顺手把爽约次数清零，
+        # 否则用户解封后只要再爽约 1 次就会被立刻重新封禁。
+        if change and form.initial.get("banned_until") and obj.banned_until is None:
+            obj.no_show_count = 0
+        super().save_model(request, obj, form, change)
 
 
 # @admin.register(Area)
