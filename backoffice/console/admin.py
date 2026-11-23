@@ -4,6 +4,7 @@
 FastAPI service 层的业务不变量。等 W3D2 再单独开放"安全的写"（例如座位启停用）。
 """
 
+from django import forms
 from django.contrib import admin
 from django.db.models import Count
 
@@ -21,14 +22,27 @@ class ReadOnlyAdmin(admin.ModelAdmin):
     - 把 reservations.status 改成 CHECKED_IN 不会补 checked_in_at；
     - 手删 reservation_slots 的一行不会同步取消预约单；
     - 改 reservation_slots.seat_id 会造成"幽灵占用"（座位被占但日历不显示）。
-    所以后台先只做"看"，写操作留给后续单独的接口。
+
+    默认全部只读。子类用 editable_fields 显式声明"经评估可以安全修改"的字段，
+    其余字段由 get_readonly_fields 自动补成只读。
     """
+
+    editable_fields: tuple[str, ...] = ()
+
+    def get_readonly_fields(self, request, obj=None):
+        declared = list(super().get_readonly_fields(request, obj))
+        editable = set(self.editable_fields)
+        for field in self.model._meta.fields:
+            if field.name not in editable and field.name not in declared:
+                declared.append(field.name)
+        return declared
 
     def has_add_permission(self, request) -> bool:
         return False
 
     def has_change_permission(self, request, obj=None) -> bool:
-        return False
+        # 只有声明了可编辑白名单的页面才出现"保存"按钮
+        return bool(self.editable_fields)
 
     def has_delete_permission(self, request, obj=None) -> bool:
         return False
@@ -135,7 +149,25 @@ class AreaAdmin(ReadOnlyAdmin):
     def seat_count(self, obj: Area) -> int:
         return obj._seat_count
 
+class _SeatAdminForm(forms.ModelForm):
+    """座位启停用的业务校验：不允许把"还有未完成预约"的座位停掉。"""
 
+    class Meta:
+        model = Seat
+        fields = ("code", "area", "has_power", "is_active")
+
+    def clean_is_active(self) -> bool:
+        is_active: bool = self.cleaned_data["is_active"]
+        if is_active or self.instance.pk is None:
+            return is_active
+
+        busy = Reservation.objects.filter(
+            seat_id=self.instance.pk,
+            status__in=("PENDING", "CHECKED_IN"),
+        ).exists()
+        if busy:
+            raise forms.ValidationError("该座位还有未完成的预约，请先处理后再停用。")
+        return is_active
 # @admin.register(Seat)
 # class SeatAdmin(ReadOnlyAdmin):
 #     list_display = ("id", "code", "area", "has_power", "is_active")
@@ -152,6 +184,8 @@ class SeatAdmin(ReadOnlyAdmin):
     ordering = ("area__name", "code")
     list_per_page = 50
 
+    editable_fields = ("is_active",)      # ← 新增：只放开这一个字段
+    form = _SeatAdminForm                 # ← 新增：挂业务校验
     readonly_fields = ("id", "created_at")
     fieldsets = (
         ("座位", {"fields": ("id", "code", "area")}),
