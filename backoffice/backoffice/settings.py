@@ -63,7 +63,7 @@ DB_HOST = "127.0.0.1"
 DB_PORT = "3306"
 
 try:  # 本机私有配置，已在 .gitignore 中忽略
-    from .local_settings import *  
+    from .local_settings import *
 except ModuleNotFoundError as exc:
     # 只有"这个模块本身不存在"才允许沉默；local_settings 内部导入失败要照常报错
     if exc.name != f"{__package__}.local_settings":
