@@ -49,3 +49,4 @@ websockets==17.4
 Django==5.2.19
 PyMySQL==1.2.4
 tzdata==2026.6
+cryptography==50.0.2
