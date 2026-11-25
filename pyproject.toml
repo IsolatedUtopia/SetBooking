@@ -14,3 +14,13 @@ ignore = ["E501", "B008"]
 
 [tool.ruff.lint.per-file-ignores]
 "backoffice/backoffice/settings.py" = ["F403", "F405"]
+
+[tool.coverage.run]
+# SQLAlchemy 的异步访问在 greenlet 之间切换；coverage 默认的 C 追踪器不跟随 greenlet，
+# 会把 await 之后的代码误判为"未执行"。显式声明后才能测准。
+concurrency = ["greenlet", "thread"]
+source = ["app"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 85
