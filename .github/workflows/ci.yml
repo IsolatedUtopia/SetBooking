@@ -45,5 +45,15 @@ jobs:
       - name: Migrate (real MySQL)
         run: alembic upgrade head
 
-      - name: Test
-        run: python -m pytest -q
+      - name: Test (with coverage gate)
+        run: python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=85
+
+      - name: Django check
+        working-directory: backoffice
+        env:
+          DB_NAME: seat_booking
+          DB_USER: seat
+          DB_PASSWORD: seat
+          DB_HOST: 127.0.0.1
+          DB_PORT: "3306"
+        run: python manage.py check --database default

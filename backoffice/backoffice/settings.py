@@ -5,7 +5,7 @@
 2. 业务表的结构所有权归 FastAPI 侧的 Alembic，Django 不建表、不改表；
 3. Django 自己要用的表（后台账号、权限、会话）由它自己的 migrate 创建，名字带前缀。
 """
-
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -56,14 +56,17 @@ ASGI_APPLICATION = "backoffice.asgi.application"
 
 # --- 数据库 -----------------------------------------------------------------
 # 默认值只写了"非敏感"的部分；账号密码放在不提交的 local_settings.py 里。
-DB_NAME = "seat_booking"
-DB_USER = "seat"
-DB_PASSWORD = ""
-DB_HOST = "127.0.0.1"
-DB_PORT = "3306"
+# 优先级：环境变量 > local_settings.py > 默认值。
+# 这样 CI / 容器只需要设置 DB_* 环境变量，不必把密码写进仓库；
+# 本机仍然可以用 local_settings.py 覆盖（它排在最后，优先级最高）。
+DB_NAME = os.environ.get("DB_NAME", "seat_booking")
+DB_USER = os.environ.get("DB_USER", "seat")
+DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
+DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
+DB_PORT = os.environ.get("DB_PORT", "3306")
 
 try:  # 本机私有配置，已在 .gitignore 中忽略
-    from .local_settings import *
+    from .local_settings import *  # noqa: F403
 except ModuleNotFoundError as exc:
     # 只有"这个模块本身不存在"才允许沉默；local_settings 内部导入失败要照常报错
     if exc.name != f"{__package__}.local_settings":
