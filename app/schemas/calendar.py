@@ -13,6 +13,7 @@ class SeatDay(BaseModel):
     seat_id: int
     code: str
     has_power: bool
+    is_active: bool          # ← 新增：前端据此显示"已停用，仅可查看存量预约"
     occupied_slots: list[int]
 
 

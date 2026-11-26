@@ -185,24 +185,12 @@ class AreaAdmin(ReadOnlyAdmin):
         return obj._seat_count
 
 class _SeatAdminForm(forms.ModelForm):
-    """座位启停用的业务校验：不允许把"还有未完成预约"的座位停掉。"""
+    """座位启停用的表单；停用后存量预约保留，无需在这里拦截。"""
 
     class Meta:
         model = Seat
         fields = ("code", "area", "has_power", "is_active")
 
-    def clean_is_active(self) -> bool:
-        is_active: bool = self.cleaned_data["is_active"]
-        if is_active or self.instance.pk is None:
-            return is_active
-
-        busy = Reservation.objects.filter(
-            seat_id=self.instance.pk,
-            status__in=("PENDING", "CHECKED_IN"),
-        ).exists()
-        if busy:
-            raise forms.ValidationError("该座位还有未完成的预约，请先处理后再停用。")
-        return is_active
 # @admin.register(Seat)
 # class SeatAdmin(ReadOnlyAdmin):
 #     list_display = ("id", "code", "area", "has_power", "is_active")

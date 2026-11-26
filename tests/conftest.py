@@ -8,6 +8,7 @@ from app.db.base import Base
 from app.db.session import get_session
 from app.main import app
 from app.models import Area, Seat
+from tests.helpers import register_and_login
 
 
 @pytest_asyncio.fixture
@@ -47,3 +48,8 @@ async def client(session_factory):#client 管"HTTP 请求走哪个库"
         yield ac
 
     app.dependency_overrides.clear()
+
+@pytest_asyncio.fixture
+async def headers(client) -> dict[str, str]:
+    """注册并登录一个测试用户，返回可直接放进请求的 Authorization 头。"""
+    return await register_and_login(client)

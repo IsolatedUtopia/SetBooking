@@ -46,9 +46,7 @@ async def get_area_calendar(session: AsyncSession, area_id: int, day: date) -> A
 
     seats = list(
         await session.scalars(
-            select(Seat)
-            .where(Seat.area_id == area_id, Seat.is_active.is_(True))
-            .order_by(Seat.code)
+            select(Seat).where(Seat.area_id == area_id).order_by(Seat.code)
         )
     )
 
@@ -75,8 +73,10 @@ async def get_area_calendar(session: AsyncSession, area_id: int, day: date) -> A
                 seat_id=seat.id,
                 code=seat.code,
                 has_power=seat.has_power,
+                is_active=seat.is_active,
                 occupied_slots=occupied.get(seat.id, []),
             )
             for seat in seats
+            if seat.is_active or occupied.get(seat.id)
         ],
     )
