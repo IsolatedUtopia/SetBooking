@@ -1,0 +1,17 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+dev.db
+*.bak
+.env
+.env.*
+backoffice/backoffice/local_settings.py
+docs/images
+tests
+backoffice/staticfiles

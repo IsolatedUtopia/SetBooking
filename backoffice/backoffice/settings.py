@@ -24,8 +24,13 @@ INSTALLED_APPS = [
     "console",
 ]
 
+# console 的 5 个模型全部 managed = False（表结构由 Alembic 管），
+# 这里声明"console 没有迁移"，否则 migrate 每次都会提示"有未生成的迁移"。
+MIGRATION_MODULES = {"console": None}
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",   # ← 新增：由 WSGI 层直接吐静态文件
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -93,4 +98,6 @@ USE_I18N = True
 USE_TZ = False
 
 STATIC_URL = "static/"
+# collectstatic 把 admin 的 CSS/JS 收集到这个目录，WhiteNoise 从这读
+STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
