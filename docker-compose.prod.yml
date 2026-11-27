@@ -1,0 +1,16 @@
+# 生产覆盖文件（❌ 未在本机验证）
+#
+# 作用：把 8000/8001 从「绑定所有网卡」改成「只绑定回环地址」，
+#       外部访问一律经 Nginx。Compose 会用后加载的文件覆盖前面的 ports。
+#
+# 用法：
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  api:
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  admin:
+    ports:
+      - "127.0.0.1:8001:8001"

@@ -48,6 +48,7 @@ FastAPI · SQLAlchemy 2.0 (async) · MySQL 8.0 · Alembic · Pydantic v2 · PyJW
 | [docs/benchmark.md](docs/benchmark.md) | 并发压测实验 A/B 的完整数据与复现方式 |
 | [docs/api.md](docs/api.md) | 11 个端点 + 错误码约定 |
 | [docs/setup.md](docs/setup.md) | 环境搭建、Django 后台、常见坑 |
+| [docs/deploy.md](docs/deploy.md) | 容器化部署、Nginx 反代、备份回滚（部分未验证） |
 
 ## 已知限制
 
