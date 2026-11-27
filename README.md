@@ -52,7 +52,8 @@ FastAPI · SQLAlchemy 2.0 (async) · MySQL 8.0 · Alembic · Pydantic v2 · PyJW
 
 ## 已知限制
 
-- 定时任务在进程内，仅支持单实例（多实例需 Redis 锁）
+- 定时任务在进程内，仅支持单实例（多实例需外部调度，如 Celery beat）
+- 登出/踢人需要状态存储（Redis 黑名单），当前 JWT 无状态、无法主动失效
 - 只有 access token，无 refresh token 与登出黑名单
 - 业务时间固定北京时间，未做多时区
 - 暂无前端，交互走 Swagger UI 与 Django Admin

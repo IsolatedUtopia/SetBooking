@@ -10,7 +10,10 @@
 | 周 | 主题 | 产出 | 验收标准 |
 | --- | --- | --- | --- |
 | W1 | 骨架 → 能预约 | 5 张表、JWT、预约创建/取消、pytest | `pytest` 全绿；两个请求同时抢同一座位，一个 201 一个 409 |
-| W2 | 并发与自动化 | Redis 锁、签到、超时释放、Locust 压测 | 压测报告：加锁前后 409 率对比 |
+| W2 | 并发与自动化 | Redis 锁(并未实现)、签到、超时释放、Locust 压测 | 压测报告：加锁前后 409 率对比 |
+> **执行偏差说明**：W2 的 Redis 分布式锁与 Locust 压测未实施——防超卖正确性由
+> 唯一索引承担，锁只能减少无效写入；压测改用 `scripts/concurrent_booking.py`
+> 直接打 20 并发。详见 `docs/benchmark.md`。
 | W3 | 后台与工程质量 | Django Admin、GitHub Actions、覆盖率 | CI 绿；后台能改座位/看预约 |
 | W4 | 上线 | Docker Compose、Nginx、云部署、README | 公网 URL 能打开 `/docs` |
 
